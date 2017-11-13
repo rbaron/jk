@@ -1,0 +1,3 @@
+Here is an example file
+it has unicode 芘 chars
+and even ☹  smiley emojis
