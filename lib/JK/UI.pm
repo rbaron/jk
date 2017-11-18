@@ -27,8 +27,7 @@ sub _go_to_abs {
   my ($y, $x) = @_;
   "\033[$y;${x}H";
 }
-#syscall(SYS_write(), fileno(STDOUT), $s, length $s);
-#require 'syscall.ph';
+
 sub render {
   my $state = shift;
 
@@ -64,20 +63,19 @@ sub render {
   $content .= "\n$state->{cursor_y}, $state->{cursor_x}\n";
 
   # Disable STDOUT buffering ($| srsly)
-  #$| = 1;
+  $| = 1;
   $content .= _go_to_abs($state->{cursor_y} + 1, $state->{cursor_x} + 1);
-  #$| = 0;
+  binmode STDOUT, ":encoding(UTF-8)";
+  print STDOUT $content;
+  $| = 0;
 
-  # This is apparently fast than `print`'ing.
-  # The reason might be that perl uses a line-buffer approach
-  # to printing to STDOUT, which eventually causes flickering.
-  # Apparently using this lower level print does not (athough I'm
-  # not entirely sure);
-  my $io = IO::Handle->new();
-  if ($io->fdopen(fileno(STDOUT),"w")) {
-      $io->print($content);
-      $io->flush();
-  }
+  # TODO: figure out a way of printing to STDOUT in a smarter way
+  # to avoid flickering. The code below doesn't seem to make a difference.
+  #my $io = IO::Handle->new();
+  #if ($io->fdopen(fileno(STDOUT),"w")) {
+  #    $io->print($content);
+  #    $io->flush();
+  #}
 }
 
 1;

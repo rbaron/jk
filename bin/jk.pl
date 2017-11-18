@@ -7,8 +7,12 @@ use JK::UI;
 use JK::State;
 use JK::Input;
 
+use Data::Dump 'pp';
+
 use Data::Dumper;
 
+
+binmode STDOUT, ":encoding(UTF-8)";
 
 my $state = JK::State::new($ARGV[0]);
 JK::UI::render($state);
@@ -18,5 +22,4 @@ while (1) {
 
   JK::State::update($state, $key);
   JK::UI::render($state);
-  #print Dumper($key) . " " . Dumper(ord($key));
 }

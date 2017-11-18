@@ -47,11 +47,6 @@ sub make_rope {
     push(@leaves, _make_leaf(0, 0, ''));
   }
 
-  # Make sure we have an even number of leaves for pa
-  if (scalar(@leaves) % 2 != 0) {
-    push(@leaves, _make_leaf(0, 0, ''));
-  }
-
   # Heuristic for starting the rope reasonably balanced
   pairwise_concat(@leaves)
 }
@@ -108,103 +103,59 @@ sub concat {
   $new_node
 }
 
-sub erase_parent_link {
-  my $node = shift;
-
-  return unless $node->{parent};
-
-  if ($node == $node->{parent}{left}) {
-    $node->{parent}{left} = undef;
-  } else {
-    $node->{parent}{right} = undef;
-  }
-  $node->{parent} = undef;
-}
-
-# Adjust size from nodes above the removed one
-sub adjust_tree_for_removed_node {
-  my $removed_node = shift;
-
-  # Account for whole subtree, not only the node size itself
-  my $full_size = full_size($removed_node);
-
-  my $inner;
-  $inner = sub {
-    my $node = shift;
-
-    if ($node->{parent}) {
-      if ($node->{parent}{left} == $node) {
-        $node->{parent}{size} -= $full_size;
-        return $inner->($node->{parent});
-      } else {
-        return $inner->($node->{parent});
-      }
-    }
-  };
-
-  return $inner->($removed_node);
-}
-
 sub _count_newlines {
-  my @count = shift =~ /"\n"/g;
-  scalar @count
+  #my @count = shift =~ /"\n"/g;
+  my $counter = 0;
+  for my $char (split //, shift) {
+    $counter++ if $char eq "\n";
+  }
+  return $counter;
 }
 
 sub rsplit {
   my ($node, $pos) = @_;
 
-  # Lucky us
-  if ($pos == 0) {
-      # Is there a different between whether $node is left and right child?
+  if ($node->{type} eq 'leaf') {
+    my $sleft  = substr($node->{str}, 0, $pos);
+    my $sright = substr($node->{str}, $pos);
 
-      my $parent = $node->{parent};
-      #erase_parent_link($node);
-      return ($parent, $node);
+    return (
+      _make_leaf(length($sleft), _count_newlines($sleft), $sleft),
+      _make_leaf(length($sright), _count_newlines($sright), $sright),
+    );
 
-  # Split point is in the right subtree
-  } elsif ($pos >= $node->{size}) {
-    return rsplit($node->{right}, $pos - $node->{size});
-
-  # Split point is in the left subtree
+  # $node is not leaf
   } else {
+    if ($pos == $node->{size}) {
+      $node->{left}{parent}  = undef if $node->{left};
+      $node->{right}{parent} = undef if $node->{right};
 
-    if ($node->{type} eq 'leaf') {
+      return ($node->{left}, $node->{right});
 
-      # If we're not splitting on the boundary of two nodes,
-      # we create a new node so that's now the case
-      my $sleft  = substr($node->{str}, 0, $pos);
-      my $sright = substr($node->{str}, $pos);
+    # Split point is on left subtree
+    } elsif ($pos < $node->{size}) {
 
-      my $new_node = concat(
-        _make_leaf(length($sleft), _count_newlines($sleft), $sleft),
-        _make_leaf(length($sright), _count_newlines($sright), $sright),
-      );
+      my $left = $node->{left};
+      $left->{parent} = undef;
 
-      $new_node->{parent} = $node->{parent};
+      $node->{size}     = 0;
+      $node->{newlines} = 0;
+      $node->{left}     = undef;
 
-      if ($node->{parent}{left} == $node) {
-        $node->{parent}{left} = $new_node;
-      } else {
-        $node->{parent}{right} = $new_node;
-      }
+      # Recurse on left subtree
+      my ($lleft, $rleft) = rsplit($left, $pos);
+      return ($lleft, concat($rleft, $node));
 
-      ## Recurse so that $pos == 0
-      return rsplit($new_node->{right}, 0);
+    # Split point is on right subtree
+    } elsif ($pos > $node->{size}) {
+      my $right = $node->{right};
+      $right->{parent} = undef;
+      $node->{right}   = undef;
 
-    # Splitting on pos > 0 on left tree that is not a leaf
-    } else {
+      # Recurse on left subtree
+      my ($lright, $rright) = rsplit($right, $pos - $node->{size});
 
-      # Split the left subtree and adjust
-      my ($what1, $left_right) = rsplit($node->{left}, $pos);
-
-      # Remove the right branch altogether and adjust
-      my ($what2, $right) = rsplit($node->{right}, 0);
-      adjust_tree_for_removed_node($left_right);
-      adjust_tree_for_removed_node($right);
-      erase_parent_link($left_right);
-      erase_parent_link($right);
-
-      return ($node, concat($left_right, $right));
+      return (concat($node, $lright), $rright);
     }
   }
 }
@@ -223,7 +174,7 @@ sub pairwise_concat {
       my $left  = shift(@nodes);
       my $right = shift(@nodes);
 
-      push(@upper_level, concat($left, $right));
+      push(@upper_level, defined($right) ? concat($left, $right) : $left);
     }
 
     return pairwise_concat(@upper_level);
@@ -242,41 +193,58 @@ sub char_at {
   }
 }
 
+# TODO: this can definitely be optimized, since we're mostly doing
+# single chars inserts. Two options:
+#
+# 1. Insert single char as a new leaf, concatenate  and move on with life.
+#  Pros: rsplit & concat is all we need; they handle all the sizes/newlines math.
+#  Cons: Sounds inefficient
+#
+# 2. Be smart and concatenate single chars to the most appropriate.
+#  Pros: smarter, more efficient
+#  Cons: we have to handle the propagation of new sizes/newlines here
+#
 sub insert_at {
   my ($node, $pos, $str) = @_;
 
-  if ($node->{type} eq 'leaf') {
+  my $newleaf = _make_leaf(1, $str eq "\n" ? 1 : 0, $str);
 
-    # TODO: check if node is too big and split it if so
-    $node->{str} = substr($node->{str}, 0, $pos) . $str . substr($node->{str}, $pos);
-  } elsif ($pos < $node->{size}) {
-    return insert_at($node->{left}, $pos, $str);
+  if ($pos == 0) {
+    return concat($newleaf, $node);
   } else {
-    return insert_at($node->{right}, $pos - $node->{size}, $str);
+    my ($left, $right) = rsplit($node, $pos);
+    my $newleaf = _make_leaf(1, $str eq "\n" ? 1 : 0, $str);
+
+    # Randomize?
+    return concat($left, concat($newleaf, $right));
   }
 }
 
-# Get char index or a given line number
 sub line_index {
   my ($node, $line_n) = @_;
 
+  die unless ($node);
   if ($node->{type} eq 'leaf') {
 
     my ($counter, $newlines) = (0, 0);
 
     for my $char (split //, $node->{str}) {
       return $counter if ($newlines == $line_n);
+      #return $counter + 1 if ($newlines == $line_n - 1);
 
       $newlines++ if ($char eq "\n");
       $counter++;
     }
-  } elsif ($line_n < $node->{newlines}) {
+    return $counter;
+  } elsif ($line_n <= $node->{newlines}) {
     return line_index($node->{left}, $line_n);
   } else {
-    return $node->{size} + line_index($node->{right}, $line_n - $node->{size});
+    return $node->{size} + line_index($node->{right}, $line_n - $node->{newlines});
   }
 }
 
+# TODO: wide unicode chars have length 1 for us, but some terminals may
+# render them with a width of 2.
 sub line_len {
   my ($rope, $line_nr) = @_;
 
@@ -293,7 +261,7 @@ sub report {
 
   unless ($report_fn) {
     $report_fn = sub {
-      print STDERR shift;
+      print STDOUT shift;
     };
   }
 
@@ -328,6 +296,7 @@ sub iter_from {
 
   # closure for setting up the $curr_char recursively. Sets to undef when
   # the rope is exhausted
+  # TODO: fix annoying deep recursion warnings. *cue arctic monkeys song* But how deep is too deep?
   my $set_next;
   $set_next = sub {
 
@@ -385,7 +354,7 @@ sub to_str {
   my $content = '';
   my $pos = $i;
 
-  while (my $char = $iter->{next}()) {
+  while (defined(my $char = $iter->{next}())) {
     $content .= $char;
     last if (defined($j) && ($pos++ >= $j));
   }

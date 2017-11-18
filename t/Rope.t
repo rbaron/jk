@@ -60,12 +60,30 @@ subtest 'Inserting at works' => sub {
   my $content = _read_file($filename);
 
   for my $pos (0..(length($content)-1)) {
-    my $rope = JK::Rope::make_rope($filename, 16);
+    my $rope = JK::Rope::make_rope($filename, 4);
 
-    JK::Rope::insert_at($rope, $pos, "a");
+    $rope = JK::Rope::insert_at($rope, $pos, "c");
+    $rope = JK::Rope::insert_at($rope, $pos, "b");
+    $rope = JK::Rope::insert_at($rope, $pos, "a");
+
     is(
-      substr($content, 0, $pos) . "a" . substr($content, $pos),
-      JK::Rope::to_str($rope)
+      JK::Rope::to_str($rope),
+      substr($content, 0, $pos) . "abc" . substr($content, $pos),
+    );
+
+    is(
+      JK::Rope::line_index($rope, 0),
+      0,
+    );
+
+    is(
+      JK::Rope::full_newlines($rope),
+      3
+    );
+
+    is(
+      JK::Rope::full_size($rope),
+      length($content) + 3,
     );
   }
 };
@@ -108,11 +126,32 @@ subtest 'Splitting works' => sub {
   my $content = _read_file($filename);
 
   for my $splitting_idx (1..(length($content)-2)) {
-    my $rope = JK::Rope::make_rope($filename);
+    my $rope = JK::Rope::make_rope($filename, 4);
     my ($r1, $r2) = JK::Rope::rsplit($rope, $splitting_idx);
 
     is(JK::Rope::to_str($r1), substr($content, 0, $splitting_idx));
     is(JK::Rope::to_str($r2), substr($content, $splitting_idx));
+  }
+};
+
+subtest 'Splitting works #2' => sub {
+
+  my $filename = 't/data/AtoG.txt';
+
+  my $content = _read_file($filename);
+
+  for my $splitting_idx (1..(length($content)-2)) {
+    my $rope = JK::Rope::make_rope($filename, 4);
+
+    my ($r1, $r2) = JK::Rope::rsplit($rope, $splitting_idx);
+    #print STDERR "\nLeft:  $r1->{size}, $r1->{newlines}\n";
+    #print STDERR "\nRight: $r2->{size}, $r2->{newlines}\n";
+    my $lefts  = substr($content, 0, $splitting_idx);
+    my $rights = substr($content, $splitting_idx);
+    is(JK::Rope::to_str($r1), $lefts);
+    is(JK::Rope::to_str($r2), $rights);
+    is(JK::Rope::full_size($r1), length($lefts));
+    is(JK::Rope::full_size($r2), length($rights));
   }
 };
 
@@ -147,8 +186,11 @@ subtest 'Iterate from works' => sub {
     my $iter = JK::Rope::iter_from($rope, $starting_idx);
 
     my $concatd = '';
+
+    my $curr = 0;
     while (my $char = $iter->{next}()) {
       $concatd .= $char;
+      $curr++;
     }
 
     is($concatd, $correct);
@@ -158,7 +200,7 @@ subtest 'Iterate from works' => sub {
 subtest 'Line index works' => sub {
   my $filename = 't/data/multiline.txt';
 
-  my $rope = JK::Rope::make_rope($filename);
+  my $rope = JK::Rope::make_rope($filename, 4);
 
   my $content = _read_file($filename);
 
@@ -175,6 +217,5 @@ subtest 'Line index works' => sub {
     $chars_seen += length($lines[$line_nr]) + 1;
   }
 };
-
 
 done_testing()

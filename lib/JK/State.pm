@@ -4,10 +4,17 @@ use strict;
 use warnings;
 
 use JK::Rope;
+use Data::Dump 'pp';
 
 use constant {
   MODE_READ  => 0,
   MODE_WRITE => 1,
+
+  RETURN_KC  => 10,
+  ESC_KC     => 27,
+
+  CTRL_J     => 10,
+  CTRL_K     => 11,
 };
 
 my %KEYCODES = (
@@ -22,7 +29,7 @@ sub new {
   # Note that internally cursor indices are 0-indexed, while
   # they are 1-indexed in terminal coordinates
   {
-    rope     => JK::Rope::make_rope($filename),
+    rope     => JK::Rope::make_rope($filename, 512),
     mode     => MODE_READ,
     cursor_x => 0,
     cursor_y => 0,
@@ -89,18 +96,30 @@ sub _update_read_mode {
 }
 
 sub _update_write_mode {
+  select(STDERR);
+  $| = 1;
+  select(STDOUT);
   my ($state, $key) = @_;
 
   my $keycode = ord($key);
 
-  if ($KEYCODES{$keycode} eq 'ESC') {
+  #die $keycode unless($keycode);
+
+  if ($keycode == ESC_KC) {
     $state->{mode} = MODE_READ;
+
+  } elsif ($keycode == RETURN_KC) {
+    my $line_idx = JK::Rope::line_index($state->{rope}, $state->{cursor_y});
+    my $idx = $line_idx + $state->{cursor_x};
+    $state->{rope} = JK::Rope::insert_at($state->{rope}, $idx, $key);
+    $state->{cursor_y}++;
+    $state->{cursor_x} = 0;
 
   } else {
     my $line_idx = JK::Rope::line_index($state->{rope}, $state->{cursor_y});
     my $idx = $line_idx + $state->{cursor_x};
     $state->{cursor_x}++;
-    JK::Rope::insert_at($state->{rope}, $idx, $key);
+    $state->{rope} = JK::Rope::insert_at($state->{rope}, $idx, $key);
   }
 }
 
