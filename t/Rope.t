@@ -144,8 +144,6 @@ subtest 'Splitting works #2' => sub {
     my $rope = JK::Rope::make_rope($filename, 4);
 
     my ($r1, $r2) = JK::Rope::rsplit($rope, $splitting_idx);
-    #print STDERR "\nLeft:  $r1->{size}, $r1->{newlines}\n";
-    #print STDERR "\nRight: $r2->{size}, $r2->{newlines}\n";
     my $lefts  = substr($content, 0, $splitting_idx);
     my $rights = substr($content, $splitting_idx);
     is(JK::Rope::to_str($r1), $lefts);

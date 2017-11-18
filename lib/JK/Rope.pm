@@ -7,14 +7,15 @@ use open ':std', ':encoding(UTF-8)';
 use feature 'say';
 use Data::Dump 'pp';
 
-
-my $DEFAULT_MAX_LEAF_SIZE = 512;
+use constant {
+  DEFAULT_MAX_LEAF_SIZE => 512,
+};
 
 
 sub make_rope {
   my ($filename, $max_leaf_size) = @_;
 
-  $max_leaf_size //= $DEFAULT_MAX_LEAF_SIZE;
+  $max_leaf_size //= DEFAULT_MAX_LEAF_SIZE;
 
   open(my $fh, "<:encoding(UTF-8)", $filename) || die "Unable to open file";
 
@@ -29,7 +30,7 @@ sub make_rope {
     $newlines++ if $char eq "\n";
 
     if (++$counter == $max_leaf_size) {
-      push(@leaves, _make_leaf($counter, $newlines, $str));
+      push(@leaves, _make_leaf($counter, $newlines, $str, $max_leaf_size));
 
       $counter = 0;
       $newlines = 0;
@@ -38,13 +39,13 @@ sub make_rope {
   }
 
   if ($counter) {
-    push(@leaves, _make_leaf($counter, $newlines, $str));
+    push(@leaves, _make_leaf($counter, $newlines, $str, $max_leaf_size));
   }
 
   # Handling empty files
   if (scalar(@leaves) == 0) {
-    push(@leaves, _make_leaf(0, 0, ''));
-    push(@leaves, _make_leaf(0, 0, ''));
+    push(@leaves, _make_leaf(0, 0, '', $max_leaf_size));
+    push(@leaves, _make_leaf(0, 0, '', $max_leaf_size));
   }
 
   # Heuristic for starting the rope reasonably balanced
@@ -74,14 +75,15 @@ sub full_newlines {
 }
 
 sub _make_leaf {
-  my ($size, $newlines, $str) = @_;
+  my ($size, $newlines, $str, $max_leaf_size) = @_;
 
   {
-    type     => 'leaf',
-    size     => $size,
-    newlines => $newlines,
-    str      => $str,
-    parent   => undef,
+    type          => 'leaf',
+    size          => $size,
+    newlines      => $newlines,
+    str           => $str,
+    parent        => undef,
+    max_leaf_size => $max_leaf_size,
   }
 }
 
@@ -89,12 +91,13 @@ sub concat {
   my ($left, $right)  = @_;
 
   my $new_node = {
-    type     => 'node',
-    size     => full_size($left),
-    newlines => full_newlines($left),
-    left     => $left,
-    right    => $right,
-    parent   => undef,
+    type          => 'node',
+    size          => full_size($left),
+    newlines      => full_newlines($left),
+    left          => $left,
+    right         => $right,
+    parent        => undef,
+    max_leaf_size => $left->{max_leaf_size}
   };
 
   $left->{parent} = $new_node;
@@ -104,7 +107,6 @@ sub concat {
 }
 
 sub _count_newlines {
-  #my @count = shift =~ /"\n"/g;
   my $counter = 0;
   for my $char (split //, shift) {
     $counter++ if $char eq "\n";
@@ -120,8 +122,8 @@ sub rsplit {
     my $sright = substr($node->{str}, $pos);
 
     return (
-      _make_leaf(length($sleft), _count_newlines($sleft), $sleft),
-      _make_leaf(length($sright), _count_newlines($sright), $sright),
+      _make_leaf(length($sleft), _count_newlines($sleft), $sleft, $node->{max_leaf_size}),
+      _make_leaf(length($sright), _count_newlines($sright), $sright, $node->{max_leaf_size}),
     );
 
   # $node is not leaf
@@ -193,30 +195,59 @@ sub char_at {
   }
 }
 
-# TODO: this can definitely be optimized, since we're mostly doing
-# single chars inserts. Two options:
-#
-# 1. Insert single char as a new leaf, concatenate  and move on with life.
-#  Pros: rsplit & concat is all we need; they handle all the sizes/newlines math.
-#  Cons: Sounds inefficient
-#
-# 2. Be smart and concatenate single chars to the most appropriate.
-#  Pros: smarter, more efficient
-#  Cons: we have to handle the propagation of new sizes/newlines here
-#
+# Instead of the elegant a, b = split() => concat(a, concat(new, b) approach,
+# this version simply concatenates the text in the right leaf and split it if necessary.
 sub insert_at {
   my ($node, $pos, $str) = @_;
 
-  my $newleaf = _make_leaf(1, $str eq "\n" ? 1 : 0, $str);
+  if ($node->{type} eq 'leaf') {
+    my $added_size = length($str);
+    my $added_newlines = _count_newlines($str);
 
-  if ($pos == 0) {
-    return concat($newleaf, $node);
+    $node->{str} = substr($node->{str}, 0, $pos).$str.substr($node->{str}, $pos);
+    $node->{size}     += $added_size;
+    $node->{newlines} += $added_newlines;
+
+    # Should we split?
+    if ($node->{size} > $node->{max_leaf_size}) {
+
+      # Create 2 new nodes by splitting
+      my $str1 = substr($node->{str}, 0, int($node->{size}/2));
+      my $node1 = _make_leaf(length($str1), _count_newlines($str1), $str1, $node->{max_leaf_size});
+
+      my $str2 = substr($node->{str}, int($node->{size}/2));
+      my $node2 = _make_leaf(length($str2), _count_newlines($str2), $str2, $node->{max_leaf_size});
+
+      my $new_node = concat($node1, $node2);
+
+      # Update parent reference
+      if (defined($node->{parent}{left}) && $node->{parent}{left} == $node) {
+        $node->{parent}{left} = $new_node;
+      } else {
+        $node->{parent}{right} = $new_node;
+      }
+      $new_node->{parent} = $node->{parent};
+
+      $node = $new_node;
+    }
+
+    # Adjust the parents
+    while (my $parent = $node->{parent}) {
+      # Node is left child
+      if ($parent->{left} == $node) {
+        $parent->{size}     += $added_size;
+        $parent->{newlines} += $added_newlines;
+      }
+      $node = $parent;
+    }
+    return $node;
   } else {
-    my ($left, $right) = rsplit($node, $pos);
-    my $newleaf = _make_leaf(1, $str eq "\n" ? 1 : 0, $str);
 
-    # Randomize?
-    return concat($left, concat($newleaf, $right));
+    if ($pos < $node->{size}) {
+      return insert_at($node->{left}, $pos, $str);
+    } else {
+      return insert_at($node->{right}, $pos - $node->{size}, $str);
+    }
   }
 }
 
@@ -294,25 +325,30 @@ sub iter_from {
 
   my @stack = ([$node, $i]);
 
+  my $c = 0;
+
   # closure for setting up the $curr_char recursively. Sets to undef when
   # the rope is exhausted
   # TODO: fix annoying deep recursion warnings. *cue arctic monkeys song* But how deep is too deep?
   my $set_next;
   $set_next = sub {
+    $c++;
 
+    #print STDERR "Now recusing on count $c\n";
     if ($curr_leaf) {
       if ($curr_idx >= length $curr_leaf->{str}) {
         $curr_leaf = undef;
         $curr_char = undef;
-
         return $set_next->();
       } else {
         $curr_char = substr($curr_leaf->{str}, $curr_idx++, 1);
+        $c--;
         return;
       }
     } else {
       unless (@stack) {
         $curr_char = undef;
+        $c--;
         return;
       }
 

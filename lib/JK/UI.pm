@@ -28,6 +28,11 @@ sub _go_to_abs {
   "\033[$y;${x}H";
 }
 
+sub _render_status_bar {
+  my $state = shift;
+  "\n$state->{cursor_y}, $state->{cursor_x}\n";
+}
+
 sub render {
   my $state = shift;
 
@@ -60,7 +65,7 @@ sub render {
     }
   }
 
-  $content .= "\n$state->{cursor_y}, $state->{cursor_x}\n";
+  $content .= _render_status_bar($state);
 
   # Disable STDOUT buffering ($| srsly)
   $| = 1;
