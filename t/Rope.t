@@ -3,9 +3,10 @@ use warnings;
 
 use feature 'say';
 
-use Test::More;
 use Data::Dump 'pp';
 use Data::Dumper;
+use File::Temp 'tempfile';
+use Test::More;
 
 
 use_ok('JK::Rope');
@@ -237,6 +238,22 @@ subtest 'Line len' => sub {
   for my $line_nr (0..$#lines) {
     is(JK::Rope::line_len($rope, $line_nr), length($lines[$line_nr]));
   }
+};
+
+subtest 'Writing out works' => sub {
+  my $in_filename = 't/data/unicode_chars.txt';
+
+  my $rope = JK::Rope::make_rope($in_filename, 4);
+
+  my $content = _read_file($in_filename);
+
+  my ($fh, $out_filename) = tempfile(UNLINK => 1);
+
+  JK::Rope::write_out($rope, $out_filename);
+
+  my $written_content = _read_file($out_filename);
+
+  is($written_content, $content);
 };
 
 done_testing()

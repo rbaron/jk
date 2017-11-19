@@ -38,6 +38,8 @@ sub make_rope {
     }
   }
 
+  close($fh);
+
   if ($counter) {
     push(@leaves, _make_leaf($counter, $newlines, $str, $max_leaf_size));
   }
@@ -50,6 +52,20 @@ sub make_rope {
 
   # Heuristic for starting the rope reasonably balanced
   pairwise_concat(@leaves)
+}
+
+sub write_out {
+  my ($rope, $filename) = @_;
+
+  open(my $fh, ">:encoding(UTF-8)", $filename) || die "Unable to open file";
+
+  my $iter = JK::Rope::iter_from($rope, 0);
+
+  while (defined(my $char = $iter->{next}())) {
+    print $fh $char;
+  }
+
+  close($fh);
 }
 
 # Total size (left + right subtrees)
