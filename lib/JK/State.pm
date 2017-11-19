@@ -7,21 +7,20 @@ use JK::Rope;
 use Data::Dump 'pp';
 
 use constant {
-  MODE_READ  => 0,
-  MODE_WRITE => 1,
+  MODE_READ      => 0,
+  MODE_WRITE     => 1,
+  MODE_CMD_INPUT => 2,
+  MODE_EXIT      => 3,
 
-  RETURN_KC  => 10,
-  ESC_KC     => 27,
+  RETURN_KC      => 10,
+  ESC_KC         => 27,
+  BKSPC_KC       => 127,
 
-  CTRL_J     => 10,
-  CTRL_K     => 11,
+  CTRL_J         => 10,
+  CTRL_K         => 11,
+
+  COLON_KC       => 58,
 };
-
-my %KEYCODES = (
-  27 => 'ESC',
-  10 => 'ctrl-j',
-  11 => 'ctrl-k',
-);
 
 sub new {
   my $filename = shift;
@@ -29,14 +28,19 @@ sub new {
   # Note that internally cursor indices are 0-indexed, while
   # they are 1-indexed in terminal coordinates
   {
-    rope     => JK::Rope::make_rope($filename, 512),
-    mode     => MODE_READ,
-    cursor_x => 0,
-    cursor_y => 0,
+    filename     => $filename,
+    rope         => JK::Rope::make_rope($filename, 512),
+    mode         => MODE_READ,
+    cursor_x     => 0,
+    cursor_y     => 0,
 
     # Like vim, when we scroll vertically, we'd like to be close to the
     # initial horizontal location
     cursor_x_bkp => 0,
+
+    # Current cmd being entered by the user
+    cmd          => '',
+    msg          => '',
   }
 }
 
@@ -55,8 +59,14 @@ sub _update_read_mode {
 
   my $keycode = ord($key);
 
+  # Cleanup any messages
+  $state->{msg} = '';
+
   # Movements
-  if ($key eq 'j') {
+  if ($keycode == COLON_KC) {
+    $state->{mode} = MODE_CMD_INPUT;
+
+  } elsif ($key eq 'j') {
     my $next_line = $state->{cursor_y} + 1;
 
     unless ($next_line >= JK::Rope::full_newlines($state->{rope})) {
@@ -96,14 +106,9 @@ sub _update_read_mode {
 }
 
 sub _update_write_mode {
-  select(STDERR);
-  $| = 1;
-  select(STDOUT);
   my ($state, $key) = @_;
 
   my $keycode = ord($key);
-
-  #die $keycode unless($keycode);
 
   if ($keycode == ESC_KC) {
     $state->{mode} = MODE_READ;
@@ -123,13 +128,59 @@ sub _update_write_mode {
   }
 }
 
+sub _update_cmd_input_mode {
+  my ($state, $key) = @_;
+
+  my $keycode = ord($key);
+
+
+  if ($keycode == ESC_KC) {
+    $state->{cmd}  = '';
+    $state->{mode} = MODE_READ;
+
+  } elsif ($keycode == RETURN_KC) {
+    _execute_cmd($state);
+
+  } elsif ($keycode == BKSPC_KC) {
+    $state->{cmd}  = substr($state->{cmd}, 0, max(0, length($state->{cmd}) - 1));
+
+  } else {
+    $state->{cmd} .= $key;
+  }
+}
+
+sub _execute_cmd {
+  my $state = shift;
+
+  my $cmd = $state->{cmd};
+
+  $state->{cmd} = '';
+
+  if ($cmd eq 'q') {
+    $state->{mode} = MODE_EXIT;
+
+  } elsif ($cmd eq 'w') {
+    JK::Rope::write_out($state->{rope}, $state->{filename});
+    $state->{msg} = "Written to $state->{filename}";
+    $state->{mode} = MODE_READ;
+
+  } else {
+    $state->{msg} = 'Unknown command';
+    $state->{mode} = MODE_READ;
+  }
+}
+
 sub update {
   my ($state, $key) = @_;
+
+  #warn "Got $key, ".ord($key)."\n";
 
   if ($state->{mode} == MODE_READ) {
     _update_read_mode($state, $key);
   } elsif ($state->{mode} == MODE_WRITE) {
     _update_write_mode($state, $key);
+  } elsif ($state->{mode} == MODE_CMD_INPUT) {
+    _update_cmd_input_mode($state, $key);
   } else {
     die "Invalid editor mode\n";
   }

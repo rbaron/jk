@@ -19,7 +19,7 @@ sub _get_size {
 }
 
 # Also moves to 0,0
-sub _clear {
+sub clear {
   "\033[2J";
 }
 
@@ -30,7 +30,7 @@ sub _go_to_abs {
 
 sub _render_status_bar {
   my $state = shift;
-  "\n$state->{cursor_y}, $state->{cursor_x}\n";
+  "\n$state->{cursor_y}, $state->{cursor_x} > $state->{cmd}$state->{msg}\n";
 }
 
 sub render {
@@ -42,7 +42,7 @@ sub render {
 
   my $content = '';
 
-  $content .= _clear();
+  $content .= clear();
   $content .= _go_to_abs(1, 1);
 
   my $curr_line = 0;

@@ -17,9 +17,11 @@ binmode STDOUT, ":encoding(UTF-8)";
 my $state = JK::State::new($ARGV[0]);
 JK::UI::render($state);
 
-while (1) {
+while ($state->{mode} != JK::State::MODE_EXIT) {
   my $key = JK::Input::read_key();
 
   JK::State::update($state, $key);
   JK::UI::render($state);
 }
+
+print JK::UI::clear;
