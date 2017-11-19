@@ -327,9 +327,13 @@ sub iter_from {
 
   my $c = 0;
 
-  # closure for setting up the $curr_char recursively. Sets to undef when
+  # Closure for setting up the $curr_char recursively. Sets to undef when
   # the rope is exhausted
-  # TODO: fix annoying deep recursion warnings. *cue arctic monkeys song* But how deep is too deep?
+
+  # TODO: Maybe fix annoying deep recursion warnings?
+  # Apparently the threshold is depth 100, which will only appear in testing scenarios,
+  # where the value for $node->{max_leaf_size} is small. For real-world usage, we should
+  # never recursive more than a handful of times.
   my $set_next;
   $set_next = sub {
     $c++;

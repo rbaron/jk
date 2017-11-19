@@ -23,6 +23,13 @@ sub _read_file {
   $content
 }
 
+# This is necessary because otherwise trailing empty strings are swallowed by perl...
+sub _split_lines {
+  my $content = shift;
+  my $i = 0;
+  return grep ++$i%2, split /(\n)/, $content;
+}
+
 subtest 'Creating a rope works' => sub {
   my $filename = 't/data/unicode_chars.txt';
 
@@ -198,11 +205,11 @@ subtest 'Iterate from works' => sub {
 subtest 'Line index works' => sub {
   my $filename = 't/data/multiline.txt';
 
-  my $rope = JK::Rope::make_rope($filename, 4);
+  my $rope = JK::Rope::make_rope($filename, 8);
 
   my $content = _read_file($filename);
 
-  my @lines = split /\n/, $content;
+  my @lines = _split_lines($content);
 
   my $chars_seen = 0;
 
@@ -213,6 +220,22 @@ subtest 'Line index works' => sub {
 
     # +1 to account for the newline which split swallowed
     $chars_seen += length($lines[$line_nr]) + 1;
+  }
+};
+
+subtest 'Line len' => sub {
+  my $filename = 't/data/empty_lines.txt';
+
+  my $rope = JK::Rope::make_rope($filename, 4);
+
+  my $content = _read_file($filename);
+
+  my @lines = _split_lines($content);
+
+  my $chars_seen = 0;
+
+  for my $line_nr (0..$#lines) {
+    is(JK::Rope::line_len($rope, $line_nr), length($lines[$line_nr]));
   }
 };
 

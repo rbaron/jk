@@ -63,7 +63,7 @@ sub _update_read_mode {
       $state->{cursor_y} = $next_line;
       $state->{cursor_x} = min(
         $state->{cursor_x_bkp},
-        JK::Rope::line_len($state->{rope}, $next_line)-1,
+        max(0, JK::Rope::line_len($state->{rope}, $next_line)-1),
       );
     }
 
@@ -71,7 +71,7 @@ sub _update_read_mode {
     $state->{cursor_y} = max($state->{cursor_y}-1, 0);
     $state->{cursor_x} = min(
       $state->{cursor_x_bkp},
-      JK::Rope::line_len($state->{rope}, $state->{cursor_y})-1,
+      max(0, JK::Rope::line_len($state->{rope}, $state->{cursor_y})-1),
     );
 
   } elsif ($key eq 'h') {
