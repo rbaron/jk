@@ -44,9 +44,8 @@ sub make_rope {
     push(@leaves, _make_leaf($counter, $newlines, $str, $max_leaf_size));
   }
 
-  # Handling empty files
-  if (scalar(@leaves) == 0) {
-    push(@leaves, _make_leaf(0, 0, '', $max_leaf_size));
+  # Handling empty files & making sure we'll have at least one non-leaf node
+  while (scalar(@leaves) < 2) {
     push(@leaves, _make_leaf(0, 0, '', $max_leaf_size));
   }
 
@@ -248,7 +247,7 @@ sub insert_at {
     }
 
     # Adjust the parents
-    while (my $parent = $node->{parent}) {
+    while (defined(my $parent = $node->{parent})) {
       # Node is left child
       if ($parent->{left} == $node) {
         $parent->{size}     += $added_size;

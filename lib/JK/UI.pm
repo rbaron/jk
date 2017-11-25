@@ -10,7 +10,7 @@ use JK::Rope;
 use IO::Handle;
 
 
-sub _get_size {
+sub get_size {
   my ($cols, $rows) = Term::Size::chars *STDOUT{IO};
   return {
     rows => $rows,
@@ -30,13 +30,13 @@ sub _go_to_abs {
 
 sub _render_status_bar {
   my $state = shift;
-  "\n$state->{cursor_y}, $state->{cursor_x} > $state->{cmd}$state->{msg}\n";
+  "\nrow $state->{current_row}, col $state->{current_col} > $state->{cmd}$state->{msg}\n";
 }
 
 sub render {
   my $state = shift;
 
-  my $size = _get_size;
+  my $size = get_size;
 
   my $iter = JK::Rope::iter_from($state->{rope}, 0);
 

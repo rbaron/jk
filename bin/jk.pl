@@ -15,6 +15,7 @@ use Data::Dumper;
 binmode STDOUT, ":encoding(UTF-8)";
 
 my $state = JK::State::new($ARGV[0]);
+
 JK::UI::render($state);
 
 while ($state->{mode} != JK::State::MODE_EXIT) {
