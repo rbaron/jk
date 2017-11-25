@@ -9,6 +9,10 @@ use JK::Rope;
 
 use IO::Handle;
 
+use constant {
+  BLUE    => "\033[34m",
+  DEFAULT => "\033[39m",
+};
 
 sub get_size {
   my ($cols, $rows) = Term::Size::chars *STDOUT{IO};
@@ -30,7 +34,21 @@ sub _go_to_abs {
 
 sub _render_status_bar {
   my $state = shift;
-  "\nrow $state->{current_row}, col $state->{current_col} > $state->{cmd}$state->{msg}\n";
+
+  my $bar =
+    BLUE . "row $state->{current_row}".
+    DEFAULT.", ".
+    BLUE . "col $state->{current_col}";
+
+  if ($state->{mode} == 0) {
+    $bar .= DEFAULT." Reading $state->{filename}";
+  } elsif ($state->{mode} == 1) {
+    $bar .= DEFAULT." Writing $state->{filename}";
+  } elsif ($state->{mode} == 2) {
+    $bar .= DEFAULT . " > $state->{cmd}$state->{msg}";
+  }
+
+  $bar
 }
 
 sub render {
@@ -47,6 +65,7 @@ sub render {
 
   my $curr_line = 0;
   my $curr_col = 0;
+
   while (defined(my $char = $iter->{next}())) {
     $content .= $char;
 
@@ -65,6 +84,10 @@ sub render {
     }
   }
 
+  while ($curr_line++ < $size->{rows} - 1) {
+    $content .= "\n";
+  }
+
   $content .= _render_status_bar($state);
 
   # Disable STDOUT buffering ($| srsly)
@@ -76,6 +99,7 @@ sub render {
 
   # TODO: figure out a way of printing to STDOUT in a smarter way
   # to avoid flickering. The code below doesn't seem to make a difference.
+  # Ideally, access to lower level ioctl / write calls would be nice.
   #my $io = IO::Handle->new();
   #if ($io->fdopen(fileno(STDOUT),"w")) {
   #    $io->print($content);
