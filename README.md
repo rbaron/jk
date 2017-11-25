@@ -8,12 +8,12 @@ A minimalistic vim-like text editor in the works.
 INSTALLATION
 ------------
 
-To install this module type the following:
-
-   perl Makefile.PL
-   make
-   make test
-   make install
+```
+$ perl Makefile.PL
+$ make
+$ make test
+$ make install
+```
 
 LICENSE
 -------
