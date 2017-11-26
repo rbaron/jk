@@ -26,22 +26,20 @@ use constant {
 sub new {
   my $filename = shift;
 
-  # Note that internally cursor indices are 0-indexed, while
-  # they are 1-indexed in terminal coordinates
   {
     filename     => $filename,
     rope         => JK::Rope::make_rope($filename, 512),
     mode         => MODE_READ,
-    cursor_x     => 0,
-    cursor_y     => 0,
+
+    row          => 0,
+    col          => 0,
 
     row_offset   => 0,
-    current_row  => 0,
-    current_col  => 0,
+    col_offset   => 0,
 
     # Like vim, when we scroll vertically, we'd like to be close to the
     # initial horizontal location
-    cursor_x_bkp => 0,
+    col_bkp      => 0,
 
     # Current cmd being entered by the user
     cmd          => '',
@@ -82,7 +80,7 @@ sub _update_read_mode {
 
   # Mode change
   } elsif ($key eq 'a') {
-    _update_read_mode($state, 'l');
+    _update_read_mode($state, 'l', $size);
     $state->{mode} = MODE_WRITE;
   } elsif ($key eq 'i') {
     $state->{mode} = MODE_WRITE;
@@ -98,14 +96,14 @@ sub _update_write_mode {
     $state->{mode} = MODE_READ;
 
   } elsif ($keycode == RETURN_KC) {
-    my $line_idx = JK::Rope::line_index($state->{rope}, $state->{current_row});
-    my $idx = $line_idx + $state->{current_col};
+    my $line_idx = JK::Rope::line_index($state->{rope}, $state->{row});
+    my $idx = $line_idx + $state->{col};
     $state->{rope} = JK::Rope::insert_at($state->{rope}, $idx, $key);
 
 
   } else {
-    my $line_idx = JK::Rope::line_index($state->{rope}, $state->{current_row});
-    my $idx = $line_idx + $state->{current_col};
+    my $line_idx = JK::Rope::line_index($state->{rope}, $state->{row});
+    my $idx = $line_idx + $state->{col};
     $state->{rope} = JK::Rope::insert_at($state->{rope}, $idx, $key);
     _move_right($state, $size);
   }
@@ -169,126 +167,71 @@ sub update {
   }
 }
 
-# TODO: Refactor this once I'm reasonably sure it actually works...
-sub _calculate_y_jump {
-  my ($state, $size, $old_line, $old_col, $new_line, $new_col) = @_;
-
-  my $old_len = JK::Rope::line_len($state->{rope}, $state->{row_offset} + $old_line);
-  my $new_len = JK::Rope::line_len($state->{rope}, $state->{row_offset} + $new_line);
-
-  if ($new_line < $old_line) {
-    my $total_dy_old =   1 + int(($new_len-1) / $size->{cols});
-    my $covered_dy_old = 1 + int($new_col / $size->{cols});
-    my $y_jump_old = $total_dy_old - $covered_dy_old;
-
-    my $y_jump_new = int($old_col / $size->{cols});
-
-    return -(1 + $y_jump_old + $y_jump_new);
-
-  } else {
-    my $total_dy_old =   1 + int(($old_len-1) / $size->{cols});
-    my $covered_dy_old = 1 + int($old_col / $size->{cols});
-    my $y_jump_old = $total_dy_old - $covered_dy_old;
-
-    my $y_jump_new = int($new_col / $size->{cols});
-
-    return (1 + $y_jump_old + $y_jump_new);
-  }
-}
-
 sub _move_up {
   my ($state, $size) = @_;
 
-  if ($state->{current_row} > 0) {
-    $state->{current_row} -= 1;
+  if ($state->{row} == 0) { return };
 
-    my $len = JK::Rope::line_len($state->{rope}, $state->{current_row});
+  my $y = $state->{row} - $state->{row_offset};
 
-    my $old_col = $state->{current_col};
-
-    $state->{current_col} = min(
-      $state->{cursor_x_bkp},
-      max(0, $len-1),
-    );
-
-    my $y_jump = _calculate_y_jump(
-      $state,
-      $size,
-      $state->{current_row} + 1,
-      $old_col,
-      $state->{current_row},
-      $state->{current_col},
-    );
-
-    $state->{cursor_y} += $y_jump;
-    $state->{cursor_x} = $state->{current_col} % $size->{cols};
+  if ($y > 0) {
+    $state->{row}--;
+  } elsif ($y == 0) {
+    $state->{row}--;
+    $state->{row_offset}--;
   }
 
+  my $len = JK::Rope::line_len($state->{rope}, $state->{row});
+
+  $state->{col} = min(
+    $state->{col_bkp},
+    max(0, $len-1),
+  );
+
+  $state->{col_offset} = $size->{cols} * int($state->{col} / $size->{cols});
 }
 
 sub _move_right {
   my ($state, $size) = @_;
 
-  my $len = JK::Rope::line_len($state->{rope}, $state->{current_row});
+  my $len = JK::Rope::line_len($state->{rope}, $state->{row});
 
-  if ($state->{current_col} < $len - 1) {
-    $state->{current_col} += 1;
-    $state->{cursor_x_bkp} = $state->{current_col};
-
-    my $is_line_change = ($state->{current_col} % $size->{cols}) == 0;
-
-    if ($is_line_change) {
-      $state->{cursor_y} += 1;
-      $state->{cursor_x} = 0;
-    } else {
-      $state->{cursor_x} += 1;
-    }
+  if ($state->{col} < $len - 1) {
+    $state->{col}++;
+    $state->{col_offset} = $size->{cols} * int($state->{col} / $size->{cols});
+    $state->{col_bkp} = $state->{col};
   }
 }
 
 sub _move_left {
   my ($state, $size) = @_;
 
-  if ($state->{current_col} > 0) {
-    my $is_line_change = ($state->{current_col} % $size->{cols}) == 0;
-    $state->{current_col} -= 1;
-    $state->{cursor_x_bkp} = $state->{current_col};
-
-    if ($is_line_change) {
-      $state->{cursor_y} -= 1;
-      $state->{cursor_x} = $size->{cols} - 1;
-    } else {
-      $state->{cursor_x} -= 1;
-    }
+  if ($state->{col} > 0) {
+    $state->{col}--;
+    $state->{col_offset} = $size->{cols} * int($state->{col} / $size->{cols});
+    $state->{col_bkp} = $state->{col};
   }
 }
 
 sub _move_down {
   my ($state, $size) = @_;
 
-  if ($state->{current_row} < JK::Rope::full_newlines($state->{rope}) - 1) {
-    $state->{current_row} += 1;
+  if ($state->{row} < JK::Rope::full_newlines($state->{rope}) - 1) {
 
-    my $len = JK::Rope::line_len($state->{rope}, $state->{current_row});
+    $state->{row} += 1;
 
-    my $old_col = $state->{current_col};
+    if ($state->{row} - $state->{row_offset} >= $size->{rows}) {
+      $state->{row_offset}++;
+    }
 
-    $state->{current_col} = min(
-      $state->{cursor_x_bkp},
+    my $len = JK::Rope::line_len($state->{rope}, $state->{row});
+
+    $state->{col} = min(
+      $state->{col_bkp},
       max(0, $len-1),
     );
 
-    my $y_jump = _calculate_y_jump(
-      $state,
-      $size,
-      $state->{current_row} - 1,
-      $old_col,
-      $state->{current_row},
-      $state->{current_col},
-    );
-
-    $state->{cursor_y} += $y_jump;
-    $state->{cursor_x} = $state->{current_col} % $size->{cols};
+    $state->{col_offset} = $size->{cols} * int($state->{col} / $size->{cols});
   }
 
 }

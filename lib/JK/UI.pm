@@ -36,9 +36,9 @@ sub _render_status_bar {
   my $state = shift;
 
   my $bar =
-    BLUE . "row $state->{current_row}".
+    BLUE . "row $state->{row}".
     DEFAULT.", ".
-    BLUE . "col $state->{current_col}";
+    BLUE . "col $state->{col}";
 
   if ($state->{mode} == 0) {
     $bar .= DEFAULT." Reading $state->{filename}";
@@ -51,48 +51,58 @@ sub _render_status_bar {
   $bar
 }
 
+sub _render_line {
+  my ($state, $row, $size) = @_;
+
+  if ($state->{row_offset} + $row > JK::Rope::full_newlines($state->{rope}) - 1) {
+    return "\n";
+  }
+
+  my $line_idx = JK::Rope::line_index($state->{rope}, $state->{row_offset} + $row);
+  my $iter = JK::Rope::iter_from($state->{rope}, $line_idx);
+
+  my $counter = 0;
+  my $content = '';
+
+  while (defined(my $char = $iter->{next}())) {
+    if ($char eq "\n") {
+      last;
+    }
+    if ($counter++ >= $state->{col_offset}) {
+      $content .= $char;
+    }
+    if ($counter == $state->{col_offset} + $size->{cols}) {
+      last;
+    }
+  }
+
+  $content .= "\n";
+
+  $content
+}
+
 sub render {
   my $state = shift;
 
   my $size = get_size;
 
-  my $iter = JK::Rope::iter_from($state->{rope}, 0);
+  my $iter = JK::Rope::iter_from($state->{rope}, $state->{row_offset});
 
-  my $content = '';
-
-  $content .= clear();
+  my $content .= clear();
   $content .= _go_to_abs(1, 1);
 
-  my $curr_line = 0;
-  my $curr_col = 0;
-
-  while (defined(my $char = $iter->{next}())) {
-    $content .= $char;
-
-    if ($char eq "\n") {
-      $curr_line++;
-      $curr_col = 0;
-    } else {
-      $curr_col++;
-    }
-
-    # Wrap?
-    if ($curr_col == $size->{cols}) {
-      $curr_line++;
-      $curr_col = 0;
-      $content .= "\n";
-    }
-  }
-
-  while ($curr_line++ < $size->{rows} - 1) {
-    $content .= "\n";
+  for my $row (0..($size->{rows}-2)) {
+    $content .= _render_line($state, $row, $size);
   }
 
   $content .= _render_status_bar($state);
 
+  my $cursor_x = $state->{col} % $size->{cols};
+  my $cursor_y = $state->{row} - $state->{row_offset};#$state->{row} % $size->{rows};
+
   # Disable STDOUT buffering ($| srsly)
   $| = 1;
-  $content .= _go_to_abs($state->{cursor_y} + 1, $state->{cursor_x} + 1);
+  $content .= _go_to_abs($cursor_y + 1, $cursor_x + 1);
   binmode STDOUT, ":encoding(UTF-8)";
   print STDOUT $content;
   $| = 0;
