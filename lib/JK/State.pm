@@ -199,10 +199,10 @@ sub _calculate_y_jump {
 sub _move_up {
   my ($state, $size) = @_;
 
-  if ($state->{current_row} > 0) {
+  if ($state->{row_offset} + $state->{current_row} > 0) {
     $state->{current_row} -= 1;
 
-    my $len = JK::Rope::line_len($state->{rope}, $state->{current_row});
+    my $len = JK::Rope::line_len($state->{rope}, $state->{row_offset} + $state->{current_row});
 
     my $old_col = $state->{current_col};
 
@@ -222,6 +222,15 @@ sub _move_up {
 
     $state->{cursor_y} += $y_jump;
     $state->{cursor_x} = $state->{current_col} % $size->{cols};
+
+    # Maybe scroll?
+    if ($state->{cursor_y} < 0) {
+      $state->{row_offset} -= 1;
+
+      # Undo the jump
+      #$state->{current_row} += 1;
+      #$state->{cursor_y} += (1 + $y_jump_old + $y_jump_new);
+    }
   }
 
 }
@@ -229,7 +238,7 @@ sub _move_up {
 sub _move_right {
   my ($state, $size) = @_;
 
-  my $len = JK::Rope::line_len($state->{rope}, $state->{current_row});
+  my $len = JK::Rope::line_len($state->{rope}, $state->{row_offset} + $state->{current_row});
 
   if ($state->{current_col} < $len - 1) {
     $state->{current_col} += 1;
@@ -266,10 +275,10 @@ sub _move_left {
 sub _move_down {
   my ($state, $size) = @_;
 
-  if ($state->{current_row} < JK::Rope::full_newlines($state->{rope}) - 1) {
+  if ($state->{row_offset} + $state->{current_row} < JK::Rope::full_newlines($state->{rope}) - 1) {
     $state->{current_row} += 1;
 
-    my $len = JK::Rope::line_len($state->{rope}, $state->{current_row});
+    my $len = JK::Rope::line_len($state->{rope}, $state->{row_offset} + $state->{current_row});
 
     my $old_col = $state->{current_col};
 
@@ -289,6 +298,15 @@ sub _move_down {
 
     $state->{cursor_y} += $y_jump;
     $state->{cursor_x} = $state->{current_col} % $size->{cols};
+
+    # Maybe scroll?
+    if ($state->{cursor_y} >= $size->{rows}) {
+      $state->{row_offset} += 1;
+
+      # Undo the jump
+      #$state->{current_row} -= 1;
+      #$state->{cursor_y} -= (1 + $y_jump_old + $y_jump_new);
+    }
   }
 
 }

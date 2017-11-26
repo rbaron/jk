@@ -17,6 +17,10 @@ use constant {
 sub get_size {
   my ($cols, $rows) = Term::Size::chars *STDOUT{IO};
   return {
+    rows => 20,
+    cols => 20,
+  };
+  return {
     rows => $rows,
     cols => $cols,
   }
@@ -35,8 +39,10 @@ sub _go_to_abs {
 sub _render_status_bar {
   my $state = shift;
 
+  my $row = $state->{row_offset} + $state->{current_row};
+
   my $bar =
-    BLUE . "row $state->{current_row}".
+    BLUE . "row $row".
     DEFAULT.", ".
     BLUE . "col $state->{current_col}";
 
@@ -56,7 +62,8 @@ sub render {
 
   my $size = get_size;
 
-  my $iter = JK::Rope::iter_from($state->{rope}, 0);
+  my $initial_idx = JK::Rope::line_index$state->{rope}, ($state->{row_offset});
+  my $iter = JK::Rope::iter_from($state->{rope}, $initial_idx);
 
   my $content = '';
 
@@ -81,6 +88,10 @@ sub render {
       $curr_line++;
       $curr_col = 0;
       $content .= "\n";
+    }
+
+    if ($curr_line  >= $size->{rows}) {
+      last;
     }
   }
 
