@@ -228,8 +228,8 @@ sub _move_up {
       $state->{row_offset} -= 1;
 
       # Undo the jump
-      #$state->{current_row} += 1;
-      #$state->{cursor_y} += (1 + $y_jump_old + $y_jump_new);
+      $state->{current_row} += 1;
+      $state->{cursor_y} += int($len / $size->{cols});
     }
   }
 
@@ -304,8 +304,8 @@ sub _move_down {
       $state->{row_offset} += 1;
 
       # Undo the jump
-      #$state->{current_row} -= 1;
-      #$state->{cursor_y} -= (1 + $y_jump_old + $y_jump_new);
+      $state->{current_row} -= 1;
+      $state->{cursor_y} -= int($len / $size->{cols});
     }
   }
 
