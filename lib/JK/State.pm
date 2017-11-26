@@ -169,13 +169,39 @@ sub update {
   }
 }
 
+# TODO: Refactor this once I'm reasonably sure it actually works...
+sub _calculate_y_jump {
+  my ($state, $size, $old_line, $old_col, $new_line, $new_col) = @_;
+
+  my $old_len = JK::Rope::line_len($state->{rope}, $state->{row_offset} + $old_line);
+  my $new_len = JK::Rope::line_len($state->{rope}, $state->{row_offset} + $new_line);
+
+  if ($new_line < $old_line) {
+    my $total_dy_old =   1 + int(($new_len-1) / $size->{cols});
+    my $covered_dy_old = 1 + int($new_col / $size->{cols});
+    my $y_jump_old = $total_dy_old - $covered_dy_old;
+
+    my $y_jump_new = int($old_col / $size->{cols});
+
+    return -(1 + $y_jump_old + $y_jump_new);
+
+  } else {
+    my $total_dy_old =   1 + int(($old_len-1) / $size->{cols});
+    my $covered_dy_old = 1 + int($old_col / $size->{cols});
+    my $y_jump_old = $total_dy_old - $covered_dy_old;
+
+    my $y_jump_new = int($new_col / $size->{cols});
+
+    return (1 + $y_jump_old + $y_jump_new);
+  }
+}
+
 sub _move_up {
   my ($state, $size) = @_;
 
   if ($state->{current_row} > 0) {
     $state->{current_row} -= 1;
 
-    my $old_len = JK::Rope::line_len($state->{rope}, $state->{current_row} + 1);
     my $len = JK::Rope::line_len($state->{rope}, $state->{current_row});
 
     my $old_col = $state->{current_col};
@@ -185,13 +211,16 @@ sub _move_up {
       max(0, $len-1),
     );
 
-    my $total_dy_old =   1 + int(($len-1) / $size->{cols});
-    my $covered_dy_old = 1 + int($state->{current_col} / $size->{cols});
-    my $y_jump_old = $total_dy_old - $covered_dy_old;
+    my $y_jump = _calculate_y_jump(
+      $state,
+      $size,
+      $state->{current_row} + 1,
+      $old_col,
+      $state->{current_row},
+      $state->{current_col},
+    );
 
-    my $y_jump_new = int($old_col / $size->{cols});
-
-    $state->{cursor_y} -= (1 + $y_jump_old + $y_jump_new);
+    $state->{cursor_y} += $y_jump;
     $state->{cursor_x} = $state->{current_col} % $size->{cols};
   }
 
@@ -242,9 +271,6 @@ sub _move_down {
 
     my $len = JK::Rope::line_len($state->{rope}, $state->{current_row});
 
-    my $old_row = $state->{current_row} - 1;
-    my $old_len = JK::Rope::line_len($state->{rope}, $old_row);
-
     my $old_col = $state->{current_col};
 
     $state->{current_col} = min(
@@ -252,13 +278,16 @@ sub _move_down {
       max(0, $len-1),
     );
 
-    my $total_dy_old =   1 + int(($old_len-1) / $size->{cols});
-    my $covered_dy_old = 1 + int($old_col / $size->{cols});
-    my $y_jump_old = $total_dy_old - $covered_dy_old;
+    my $y_jump = _calculate_y_jump(
+      $state,
+      $size,
+      $state->{current_row} - 1,
+      $old_col,
+      $state->{current_row},
+      $state->{current_col},
+    );
 
-    my $y_jump_new = int($state->{current_col} / $size->{cols});
-
-    $state->{cursor_y} += (1 + $y_jump_old + $y_jump_new);
+    $state->{cursor_y} += $y_jump;
     $state->{cursor_x} = $state->{current_col} % $size->{cols};
   }
 
